@@ -33,44 +33,183 @@ src/
   explain.py       Grad-CAM / Grad-CAM++ and heatmap overlays
   localization.py  heatmap vs bounding-box evaluation        (CLI)
   preprocess.py    optional one-time resize to 256px for faster training
-configs/default.yaml
+scripts/make_fake_data.py        tiny fake dataset for testing the code without the real data
+configs/default.yaml             all training settings
 notebooks/01_eda.ipynb           class imbalance, co-occurrence, split check
-notebooks/02_train_kaggle.ipynb  full pipeline on a Kaggle/Colab GPU
+notebooks/02_train_kaggle.ipynb  full pipeline on a Kaggle GPU
 app/app.py                       Gradio demo
+docs/viva-guide.html             study guide and viva questions
 ```
 
-## Setup
+## How to run
+
+There are three things you might want to do. Do them in this order the first time.
+
+| Goal | Where it runs | Time | Section |
+|---|---|---|---|
+| Check the code works | Your laptop. No GPU or dataset needed. | ~10 min | [A](#a-quick-check-on-your-laptop) |
+| Train the real model | Kaggle (free GPU) | 4–8 h, mostly unattended | [B](#b-train-the-real-model-on-kaggle) |
+| Show the demo | Your laptop, after B | 5 min | [C](#c-run-the-demo-with-your-trained-model) |
+
+### Before you start
+
+- **Python 3.10 or newer.** Check with `python --version`. On Windows, install from [python.org](https://www.python.org/downloads/) and tick **"Add python.exe to PATH"** in the installer.
+- **Git**, from [git-scm.com](https://git-scm.com/downloads), and a GitHub account that has accepted the invitation to this repository.
+- **For training:** a [Kaggle](https://www.kaggle.com) account with a verified phone number. Kaggle only enables GPUs and internet access for verified accounts.
+
+### 1. Get the code (once)
 
 ```bash
+git clone https://github.com/lay-ze/explainable-cxr-classifier.git
+cd explainable-cxr-classifier
+```
+
+The repository is private, so Git asks you to sign in to GitHub the first time.
+
+### 2. Set up Python (once)
+
+Run these from the project folder. They create a private Python environment in a `.venv` folder, so nothing is installed system-wide.
+
+**Windows (PowerShell):**
+```powershell
 python -m venv .venv
-.venv\Scripts\activate            # Windows   (Linux/macOS: source .venv/bin/activate)
-pip install -r requirements.txt   # CPU is fine for the demo; train on a GPU
+.venv\Scripts\Activate.ps1
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
 ```
 
-**Dataset:** [NIH ChestX-ray14 on Kaggle](https://www.kaggle.com/datasets/nih-chest-xrays/data) (~45 GB). On Kaggle it's mounted at `/kaggle/input/data`, so there's nothing to download.
+**macOS / Linux:**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+```
 
-## Running
+- The `torch` line installs the CPU version of PyTorch (about 200 MB rather than several GB). Your laptop doesn't need a GPU, because training happens on Kaggle.
+- When the environment is active, your prompt starts with `(.venv)`. **Every time you open a new terminal**, run the activate line again (`.venv\Scripts\Activate.ps1` or `source .venv/bin/activate`).
+- If PowerShell says *"running scripts is disabled on this system"*, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, answer `Y`, and activate again.
 
-The easiest path is to open `notebooks/02_train_kaggle.ipynb` on Kaggle with a GPU and run it top to bottom. The same steps as commands:
+### A. Quick check on your laptop
+
+This uses a tiny **fake** dataset (400 noise images) to prove that every part of the code runs on your machine. The scores mean nothing. Run the commands from the project folder with `(.venv)` active:
 
 ```bash
-# 0. (optional, recommended) resize images once, into Kaggle's temp folder (not saved as output)
+python scripts/make_fake_data.py data/fake_nih
+python -m src.train --config configs/default.yaml --data-dir data/fake_nih --out-dir outputs/smoke --epochs 2 --batch-size 16 --img-size 128 --num-workers 0
+python -m src.evaluate --checkpoint outputs/smoke/best_model.pt --data-dir data/fake_nih --num-workers 0
+python -m src.localization --checkpoint outputs/smoke/best_model.pt --data-dir data/fake_nih --bbox-ref-size 256 --max-images 50
+python app/app.py --checkpoint outputs/smoke/best_model.pt
+```
+
+What you should see:
+
+1. **make_fake_data:** `Fake dataset written to data/fake_nih: 400 images ...`
+2. **train:** the first run downloads ImageNet weights (~30 MB, needs internet). Then two epochs of under a minute each, with `train_loss` going down.
+3. **evaluate:** a table with one row per disease. **Mass** and **Cardiomegaly** score close to 1.0 because they're the only fake diseases with a visible pattern. The rest are around 0.5 (random), as they should be.
+4. **localization:** a `WARNING ... in the training split` line. That's expected for fake data, where the box images are deliberately in the training set; on the real data it should say `OK`.
+5. **app:** prints `Running on local URL: http://127.0.0.1:7860`. Open that address in your browser and upload any PNG from `data/fake_nih/images_001/images/`. Press `Ctrl+C` in the terminal to stop it.
+
+If all five steps work, your setup is correct. The `data/` and `outputs/` folders are ignored by Git, so they are never uploaded.
+
+### B. Train the real model on Kaggle
+
+The real dataset ([NIH ChestX-ray14](https://www.kaggle.com/datasets/nih-chest-xrays/data), ~45 GB) is already on Kaggle, so you never download it.
+
+1. **Zip the code.** From the project folder:
+   - Windows: `Compress-Archive -Path src, configs, app, requirements.txt -DestinationPath cxr-capstone-code.zip -Force`
+   - macOS / Linux: `zip -r cxr-capstone-code.zip src configs app requirements.txt`
+2. **Upload it as a Kaggle dataset.** On kaggle.com, go to **Create → New Dataset**, upload the zip, name it **`cxr-capstone-code`** (the notebook expects this name), keep it **Private**, then **Create**.
+3. **Import the notebook.** Go to **Create → New Notebook**, then **File → Import Notebook**, and choose `notebooks/02_train_kaggle.ipynb`.
+4. **Add the inputs.** In the right-hand panel, use **Add Input** to add `nih-chest-xrays/data` and your own `cxr-capstone-code`.
+5. **Turn on the GPU and internet.** In **Settings**, set Accelerator to **GPU T4 x2** (or **P100**) and switch **Internet** on. The internet is needed to download the ImageNet weights.
+6. **Check the paths.** In a new cell, run `!ls /kaggle/input` and `!ls /kaggle/input/*`. The code should be at `/kaggle/input/cxr-capstone-code/src` and the data at `/kaggle/input/data/Data_Entry_2017.csv`. If Kaggle put either one somewhere else, change `CODE_SRC` or `RAW_DATA` in the notebook's first cell.
+7. **Run the first three cells by hand:**
+   - setup: should print the GPU name, not `none`
+   - image resize: about 20–30 minutes
+   - 500-image test: should end with a `val_mean_AUROC` line
+
+   If those work, the pipeline works.
+8. **Start the full run in the background.** Click **Save Version → Save & Run All (Commit)**. It runs for up to 12 hours, and you can close the browser tab.
+9. **Download the results.** When the run finishes, open that version, go to the **Output** tab, and download **`results.zip`**. It contains each experiment's model, metrics, plots and heatmap examples.
+
+Kaggle gives about **30 GPU hours per week**. If you're short, edit the `EXPERIMENTS` cell so that it only runs `densenet121_wbce`, the main model. When the code changes, make a new zip and upload it on your Kaggle dataset's page with **New Version**.
+
+### C. Run the demo with your trained model
+
+1. Unzip `results.zip` into the project folder, so that you have `outputs/densenet121_wbce/best_model.pt` and `outputs/densenet121_wbce/thresholds.json`.
+2. Run:
+   ```bash
+   python app/app.py --checkpoint outputs/densenet121_wbce/best_model.pt
+   ```
+3. Open http://127.0.0.1:7860 and upload a chest X-ray. Add `--share` to the command to get a temporary public link, for example to open the demo on a phone or another laptop.
+
+### Command reference
+
+Every step can also be run on its own, from the project folder:
+
+```bash
+# Resize images once to make training faster (on Kaggle: into /kaggle/temp, which isn't saved as output)
 python -m src.preprocess --src /kaggle/input/data --dst /kaggle/temp/nih256 --size 256
 
-# 1. train  (any config key can be overridden: --loss focal --backbone efficientnet_b0 --epochs 5 ...)
+# Train
 python -m src.train --config configs/default.yaml --data-dir /kaggle/temp/nih256 --out-dir outputs/densenet121_wbce
 
-# 2. evaluate on the test split (writes thresholds.json, metrics_test.json, ROC/PR plots)
+# Evaluate on the official test split
 python -m src.evaluate --checkpoint outputs/densenet121_wbce/best_model.pt --data-dir /kaggle/temp/nih256
 
-# 3. explainability check against bounding boxes (original images give the sharpest overlays)
+# Check the heatmaps against the radiologist boxes (original images give the sharpest overlays)
 python -m src.localization --checkpoint outputs/densenet121_wbce/best_model.pt --data-dir /kaggle/input/data --method gradcam
 
-# 4. demo (copy best_model.pt + thresholds.json into one folder locally)
+# Demo
 python app/app.py --checkpoint outputs/densenet121_wbce/best_model.pt
 ```
 
-For a quick test, add `--subset 500 --epochs 1` to the train command.
+Any setting in `configs/default.yaml` can be changed on the command line:
+
+| Option | Values | Default |
+|---|---|---|
+| `--loss` | `bce`, `weighted_bce`, `focal`, `asl` | `weighted_bce` |
+| `--backbone` | `densenet121`, `resnet50`, `efficientnet_b0` | `densenet121` |
+| `--epochs`, `--batch-size`, `--lr` | numbers | `10`, `32`, `0.0001` |
+| `--img-size` | input size in pixels | `224` |
+| `--subset` | train on only this many images (quick tests) | `0` (all) |
+| `--num-workers` | parallel image loaders (use `0` on Windows laptops) | `2` |
+
+What each step writes into the run's folder (e.g. `outputs/densenet121_wbce/`):
+
+| Step | Files |
+|---|---|
+| train | `best_model.pt`, `last_model.pt`, `history.json` (scores per epoch), `config.yaml` |
+| evaluate | `thresholds.json`, `metrics_test.json`, `roc_curves.png`, `pr_curves.png`, `test_predictions.npz` |
+| localization | `localization_gradcam/` with `summary.csv`, `per_box.csv`, and `best_*.png` / `worst_*.png` examples |
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `No module named 'src'` | Run commands from the project folder, as `python -m src.train`, not `python src/train.py`. |
+| `No module named 'torch'` (or `gradio`, `yaml` ...) | The environment isn't active. Run the activate line from step 2 again. |
+| PowerShell: *running scripts is disabled* | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then activate again. |
+| Error while downloading `densenet121-....pth` | No internet. On Kaggle, switch **Internet** on in **Settings**. |
+| `FileNotFoundError: ... Data_Entry_2017.csv` | `--data-dir` points to the wrong folder; it must contain that CSV. On Kaggle, check with `!ls /kaggle/input`. |
+| `CUDA out of memory` | Add `--batch-size 16`. |
+| Kaggle training is very slow | The GPU is off (the first cell prints `GPU: none`), or the resize step was skipped. |
+| Kaggle run stops when you close the tab | Use **Save & Run All (Commit)**, not the interactive session. |
+| `Checkpoint not found` | The path to `best_model.pt` is wrong. Check where you unzipped the results. |
+| `Cannot find empty port` | Another program is using port 7860. Add `--port 7861`. |
+
+### Working together on GitHub
+
+```bash
+git pull                          # always get your teammates' changes first
+# ... edit files ...
+git add -A
+git commit -m "say what you changed"
+git push
+```
+
+If `git push` is rejected, someone else pushed first: run `git pull`, then `git push` again. Datasets, `outputs/` and `.venv/` are listed in `.gitignore`, so they are never uploaded. Keep it that way; model files are too large for GitHub.
 
 ## Demo
 
