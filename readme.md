@@ -79,6 +79,10 @@ For a quick test, add `--subset 500 --epochs 1` to the train command.
 - the conditions above their tuned threshold (several can be flagged at once),
 - Grad-CAM / Grad-CAM++ overlays for the top-k conditions or any you pick.
 
+## Study guide
+
+[docs/viva-guide.html](docs/viva-guide.html) is a plain-language guide to the whole project, with diagrams, a code map and 53 practice viva questions. Download it and open it in a browser (GitHub shows HTML files as source code).
+
 ## Results
 
 _Fill in after training._
