@@ -6,7 +6,8 @@
 1. Loss comparison. Mean test AUROC of each run with a 95% confidence interval, and the paired
    difference against the first run. Patients are resampled, not images, because most test
    patients have several X-rays and treating those as independent would make the intervals too narrow.
-2. Heatmap check split by whether the model flagged the disease (probability >= its tuned
+2. Decisions at the tuned thresholds: how often a healthy X-ray gets at least one false alarm.
+3. Heatmap check split by whether the model flagged the disease (probability >= its tuned
    threshold). A heatmap for a disease the model did not detect is not evidence of a shortcut,
    so the flagged boxes with almost no heat inside are saved as shortcut_candidates.csv.
 """
@@ -80,6 +81,23 @@ def compare_losses(runs: list[Path], n_boot: int, seed: int) -> None:
         print(f"  {n:20s} {diff:+.4f}   95% CI {lo:+.4f} to {hi:+.4f}")
 
 
+def decision_summary(run: Path) -> None:
+    """What the tuned thresholds mean for one X-ray: how often healthy images get a false alarm."""
+    thr = json.loads((run / "thresholds.json").read_text())
+    p, y, _ = load_run(run)
+    flags, y = p >= np.array(list(thr.values())), y.astype(bool)
+    healthy, sick = ~y.any(axis=1), y.any(axis=1)
+    false_alarm = (flags & ~y).sum(axis=0) / (~y).sum(axis=0)
+    print(f"\n=== Decisions at the tuned thresholds ({run.name}, {len(y)} test X-rays)")
+    print(f"healthy X-rays with at least one false alarm: {flags[healthy].any(axis=1).mean():.1%} "
+          f"(mean {flags[healthy].sum(axis=1).mean():.2f} false flags each)")
+    print(f"X-rays with a finding where at least one true finding is flagged: {(flags & y)[sick].any(axis=1).mean():.1%}")
+    print(f"exactly right (all and only the true findings): {(flags == y).all(axis=1).mean():.1%}")
+    print(f"flags per X-ray: {flags.sum(axis=1).mean():.2f}, true findings per X-ray: {y.sum(axis=1).mean():.2f}")
+    top = sorted(zip(thr, false_alarm), key=lambda t: -t[1])[:5]
+    print("highest false-alarm rates: " + ", ".join(f"{c} {r:.0%}" for c, r in top))
+
+
 def split_localisation(run: Path) -> None:
     thr = json.loads((run / "thresholds.json").read_text())
     for csv in sorted(run.glob("localization_*/per_box.csv")):
@@ -115,6 +133,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
     compare_losses([Path(r) for r in a.runs], a.n_boot, a.seed)
+    decision_summary(Path(a.main))
     split_localisation(Path(a.main))
 
 

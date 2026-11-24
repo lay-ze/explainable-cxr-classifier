@@ -42,6 +42,7 @@ notebooks/02_train_kaggle.ipynb  full pipeline on a Kaggle GPU
 notebooks/03_shortcut_cases.ipynb  pictures of the shortcut candidates (Kaggle, CPU only)
 app/app.py                       Gradio demo
 docs/viva-guide.html             study guide and viva questions
+docs/figures/                    result figures used in this readme
 ```
 
 ## How to run
@@ -259,7 +260,7 @@ If `git push` is rejected, someone else pushed first: run `git pull`, then `git 
 
 ## Study guide
 
-[docs/viva-guide.html](docs/viva-guide.html) is a plain-language guide to the whole project, with diagrams, a code map and 54 practice viva questions. Download it and open it in a browser (GitHub shows HTML files as source code).
+[docs/viva-guide.html](docs/viva-guide.html) is a plain-language guide to the whole project, with diagrams, a code map and 56 practice viva questions. Download it and open it in a browser (GitHub shows HTML files as source code).
 
 ## Results
 
@@ -330,8 +331,48 @@ Grad-CAM++ gives similar overall numbers: pointing 0.36, energy 0.16 and IoU 0.2
 - **Cardiomegaly is right for the right reason.** 99% of flagged cases point at the heart.
 - **Pneumothorax is the warning sign.** It has the fourth-highest AUROC (0.85) but the weakest localisation relative to chance. Pointing is no better when the model flags it (0.15) than when it misses it (0.14). Part of the score seems to come from evidence outside the collapsed region. This is consistent with published work showing that NIH pneumothorax models partly detect chest drains, the tubes used to treat it (Oakden-Rayner et al., 2020).
 - **Nodules are too small for Grad-CAM.** Their boxes cover 0.5% of the image, less than one cell of the 7×7 heatmap grid, so their low scores mostly reflect resolution rather than shortcuts.
-- **31 of the 521 flagged boxes (6%) have almost no heat inside the box.** By condition: Nodule 11, Pneumothorax 7, Effusion 4, Atelectasis 4, Mass 3 and Infiltration 2. They are listed in `localization_gradcam/shortcut_candidates.csv` and are the cases to inspect for drains, wires or text markers. [Section D](#d-picture-the-shortcut-candidates) draws them.
+- **31 of the 521 flagged boxes (6%) have almost no heat inside the box.** By condition: Nodule 11, Pneumothorax 7, Effusion 4, Atelectasis 4, Mass 3 and Infiltration 2. They are listed in `localization_gradcam/shortcut_candidates.csv` and are the cases to inspect for drains, wires or text markers. They are pictured below.
 - **The saved `worst_*.png` examples are missed diagnoses, not shortcuts.** All six had a probability below the threshold. Five have heat only outside the box, and one has no heatmap at all. The script ranks every box by energy in box, so a disease the model missed counts as "worst".
+
+#### What the pictures show
+
+`scripts/render_cases.py` drew the 31 cases on Kaggle (section D). The descriptions below are our own reading of the pictures, not a radiologist's.
+
+**A case that works.** For cardiomegaly, the heat sits on the heart, inside the radiologist's box.
+
+![Cardiomegaly: the heat is on the heart, inside the radiologist's box](docs/figures/cardiomegaly_good.jpg)
+
+**Pneumothorax: the heat does not follow the disease.** These are the 7 cases where the model was confident of a pneumothorax but put almost no heat inside the radiologist's box (green):
+
+![Grad-CAM for 7 pneumothorax cases: in every case the heat sits in the left middle of the chest, wherever the box is](docs/figures/pneumothorax_cases.jpg)
+
+- In all 7 cases the heat sits in the same place, the left middle of the chest. In 5 of them the pneumothorax is on the other side.
+- In case 30, a coiled chest drain lies inside the box, and the heat is still on the other side.
+- Five of the seven are bedside or intensive-care X-rays with tubes, wires or monitoring leads. That fits the model recognising "a very sick patient's X-ray" rather than the pneumothorax itself. Grad-CAM is too coarse to show which object it uses.
+- The heatmaps for the other diseases land in many different places, so this fixed spot is specific to pneumothorax.
+
+Together with the numbers above (high AUROC, poor localisation), this is the project's clearest evidence of shortcut learning.
+
+**Heat outside the lungs.** Case 10 is a "PORTABLE SUPINE" X-ray flagged for infiltration. The hottest spot is at the left shoulder and neck, where lines leave the body, while the box is low in the left lung.
+
+![Infiltration case 10: the box is in the lower left lung, the heat is at the left shoulder](docs/figures/infiltration_shoulder.jpg)
+
+**Other cases.** In case 23, the nodule is at the base of the right lung, but the heat is on the left lung, next to a rectangular metal device. In most of the 11 nodule cases the heat covers a large area around a tiny box; that reflects the 7×7 resolution limit more than a clear shortcut.
+
+X-ray images: NIH ChestX-ray14 (Wang et al., 2017).
+
+### 3. What the thresholds mean for a single X-ray
+
+Each disease's threshold was tuned to maximise F1. Across 14 separate yes/no decisions, that gives frequent false alarms:
+
+| On the 25,596 test X-rays (weighted BCE) | |
+|---|---|
+| Healthy X-rays with at least one false alarm | 62% (1.25 false flags each on average) |
+| X-rays with a finding where at least one true finding is flagged | 67% |
+| Exactly right: all the true findings and nothing else | 20% |
+| Highest false-alarm rates | Infiltration 41%, Consolidation 22%, Atelectasis 19% |
+
+So the demo will often flag something on a healthy X-ray. A screening tool would need thresholds chosen for a target specificity, for example 95% per disease, which means fewer false alarms but more missed cases. The demo's probabilities match the Kaggle evaluation to within 0.03–0.10; the small difference comes from shrinking the full-size image in one step instead of two.
 
 ## Limitations
 
@@ -339,7 +380,8 @@ Grad-CAM++ gives similar overall numbers: pointing 0.36, energy 0.16 and IoU 0.2
 - Grad-CAM resolution is limited by the 7×7 final feature map at 224px, so small nodules localise poorly.
 - Bounding boxes cover only 8 of the 14 classes and fewer than 1,000 images.
 - Each loss was trained once, with one random seed. The bootstrap intervals cover test-set variation, not training variation.
-- The 31 shortcut candidates have been found by the numbers but not yet inspected visually.
+- The shortcut pictures were read by the team, not by a radiologist.
+- The F1-tuned thresholds give many false alarms: 62% of healthy test X-rays get at least one flag.
 - All images come from one hospital system; the model has not been tested on X-rays from elsewhere.
 - This is a research prototype, not a medical device.
 
