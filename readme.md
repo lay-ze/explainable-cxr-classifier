@@ -34,9 +34,12 @@ src/
   localization.py  heatmap vs bounding-box evaluation        (CLI)
   preprocess.py    optional one-time resize to 256px for faster training
 scripts/make_fake_data.py        tiny fake dataset for testing the code without the real data
+scripts/analyse_results.py       confidence intervals and the flagged/missed heatmap split for the report
+scripts/render_cases.py          pictures of chosen cases (box + heatmap) and test X-rays for the demo
 configs/default.yaml             all training settings
 notebooks/01_eda.ipynb           class imbalance, co-occurrence, split check
 notebooks/02_train_kaggle.ipynb  full pipeline on a Kaggle GPU
+notebooks/03_shortcut_cases.ipynb  pictures of the shortcut candidates (Kaggle, CPU only)
 app/app.py                       Gradio demo
 docs/viva-guide.html             study guide and viva questions
 ```
@@ -50,6 +53,7 @@ There are three things you might want to do. Do them in this order the first tim
 | Check the code works | Your laptop. No GPU or dataset needed. | ~10 min | [A](#a-quick-check-on-your-laptop) |
 | Train the real model | Kaggle (free GPU) | 4–8 h, mostly unattended | [B](#b-train-the-real-model-on-kaggle) |
 | Show the demo | Your laptop, after B | 5 min | [C](#c-run-the-demo-with-your-trained-model) |
+| Picture the shortcut cases (optional) | Kaggle, CPU only (no GPU hours) | ~15 min | [D](#d-picture-the-shortcut-candidates) |
 
 ### Before you start
 
@@ -117,23 +121,25 @@ If all five steps work, your setup is correct. The `data/` and `outputs/` folder
 The real dataset ([NIH ChestX-ray14](https://www.kaggle.com/datasets/nih-chest-xrays/data), ~45 GB) is already on Kaggle, so you never download it.
 
 1. **Zip the code.** From the project folder:
-   - Windows: `Compress-Archive -Path src, configs, app, requirements.txt -DestinationPath cxr-capstone-code.zip -Force`
-   - macOS / Linux: `zip -r cxr-capstone-code.zip src configs app requirements.txt`
-2. **Upload it as a Kaggle dataset.** On kaggle.com, go to **Create → New Dataset**, upload the zip, name it **`cxr-capstone-code`** (the notebook expects this name), keep it **Private**, then **Create**.
-3. **Import the notebook.** Go to **Create → New Notebook**, then **File → Import Notebook**, and choose `notebooks/02_train_kaggle.ipynb`.
-4. **Add the inputs.** In the right-hand panel, use **Add Input** to add `nih-chest-xrays/data` and your own `cxr-capstone-code`.
-5. **Turn on the GPU and internet.** In **Settings**, set Accelerator to **GPU T4 x2** (or **P100**) and switch **Internet** on. The internet is needed to download the ImageNet weights.
-6. **Check the paths.** In a new cell, run `!ls /kaggle/input` and `!ls /kaggle/input/*`. The code should be at `/kaggle/input/cxr-capstone-code/src` and the data at `/kaggle/input/data/Data_Entry_2017.csv`. If Kaggle put either one somewhere else, change `CODE_SRC` or `RAW_DATA` in the notebook's first cell.
-7. **Run the first three cells by hand:**
-   - setup: should print the GPU name, not `none`
-   - image resize: about 20–30 minutes
-   - 500-image test: should end with a `val_mean_AUROC` line
+   - Windows (PowerShell): `tar -a -c -f cxr-capstone-code.zip --exclude=__pycache__ src configs app requirements.txt`
+   - macOS / Linux: `zip -r cxr-capstone-code.zip src configs app requirements.txt -x '*__pycache__*'`
 
-   If those work, the pipeline works.
-8. **Start the full run in the background.** Click **Save Version → Save & Run All (Commit)**. It runs for up to 12 hours, and you can close the browser tab.
-9. **Download the results.** When the run finishes, open that version, go to the **Output** tab, and download **`results.zip`**. It contains each experiment's model, metrics, plots and heatmap examples.
+   Don't use `Compress-Archive` on Windows. It saves folder paths with backslashes (`src\train.py`), which Kaggle's Linux machines don't read as folders. The zip is listed in `.gitignore`, so it never goes to GitHub.
+2. **Upload it as a Kaggle dataset.** On kaggle.com, go to **Create → New Dataset**, drag in the zip, title it **`cxr-capstone-code`**, keep it **Private**, then **Create**. Kaggle unzips it for you.
+3. **Import the notebook.** Go to **Create → New Notebook**, then **File → Import Notebook**, and choose `notebooks/02_train_kaggle.ipynb` from the project folder.
+4. **Add the inputs.** In the right-hand panel, click **Add Input** twice: search for `nih-chest-xrays/data` (the NIH dataset, ~45 GB, nothing is downloaded) and add it, then add your own `cxr-capstone-code` (under **Your Work** or **Datasets**).
+5. **Turn on the GPU and internet.** In the right-hand panel under **Session options** (or **Settings**), set Accelerator to **GPU T4 x2** or **GPU P100** and switch **Internet** on. The internet is needed to download the ImageNet starting weights.
+6. **Run the first two cells by hand** (click a cell, press `Shift+Enter`). This takes about 5 minutes:
+   - **Setup cell:** prints `code: ...`, `data: ...` and `GPU: Tesla T4` (or `P100`). If it says `Cannot find ...`, that input wasn't added in step 4. If it says `GPU: none`, redo step 5.
+   - **Quick test cell:** trains on 500 images for one epoch and ends with `epoch 1: train_loss=...  val_mean_AUROC=...` and `done.`. The score means nothing yet.
 
-Kaggle gives about **30 GPU hours per week**. If you're short, edit the `EXPERIMENTS` cell so that it only runs `densenet121_wbce`, the main model. When the code changes, make a new zip and upload it on your Kaggle dataset's page with **New Version**.
+   If both work, the whole pipeline works. Don't run the other cells by hand; the full run does them.
+7. **Start the full run.** Click **Save Version** (top right), choose **Save & Run All (Commit)**, then **Save**. Kaggle runs every cell from the top on a fresh machine, for up to 12 hours.
+8. **Stop the interactive session.** Click the power icon (or **Run → Stop session**). The full run carries on separately; the interactive session would otherwise keep using your GPU hours. You can now close the browser tab.
+9. **Check the timing (optional).** About 1.5 hours later (the image resize comes first), open the notebook from **Your Work → Code**, click the running version and read its log. Find the first line `epoch 1: ... (NNNs)` of `densenet121_bce`. NNN × 30 is roughly the total training time in seconds; it should be under about 8 hours.
+10. **Download the results.** When the version says it's complete, open it, go to the **Output** tab, and download **`results.zip`**. It contains each experiment's model, metrics, plots and heatmap examples.
+
+Kaggle gives about **30 GPU hours per week**; the full run uses about 4–7. If you're short, edit the `EXPERIMENTS` cell so that it only runs `densenet121_wbce`, the main model, and save a new version. When the code changes, make a new zip and upload it on your Kaggle dataset's page with **New Version**.
 
 ### C. Run the demo with your trained model
 
@@ -143,6 +149,39 @@ Kaggle gives about **30 GPU hours per week**. If you're short, edit the `EXPERIM
    python app/app.py --checkpoint outputs/densenet121_wbce/best_model.pt
    ```
 3. Open http://127.0.0.1:7860 and upload a chest X-ray. Add `--share` to the command to get a temporary public link, for example to open the demo on a phone or another laptop.
+
+Real test X-rays to try come out of section D, in `demo_samples/`. You can also download single images from the NIH dataset's page on Kaggle.
+
+### D. Picture the shortcut candidates
+
+`scripts/analyse_results.py` lists the boxes where the model flagged a disease with confidence but put almost no heat inside the radiologist's box. This step draws those cases, using the original X-rays on Kaggle. It runs on the CPU, so it uses none of your GPU hours.
+
+1. **Make the upload zip.** From the project folder, after unzipping `results.zip` and running `python scripts/analyse_results.py`:
+   - Windows (PowerShell):
+     ```powershell
+     New-Item -ItemType Directory -Force trained\densenet121_wbce | Out-Null
+     Copy-Item outputs\densenet121_wbce\best_model.pt, outputs\densenet121_wbce\thresholds.json, outputs\densenet121_wbce\localization_gradcam\shortcut_candidates.csv trained\densenet121_wbce\
+     tar -a -c -f cxr-shortcut-check.zip --exclude=__pycache__ src configs app scripts requirements.txt trained
+     ```
+   - macOS / Linux:
+     ```bash
+     mkdir -p trained/densenet121_wbce
+     cp outputs/densenet121_wbce/{best_model.pt,thresholds.json,localization_gradcam/shortcut_candidates.csv} trained/densenet121_wbce/
+     zip -r cxr-shortcut-check.zip src configs app scripts requirements.txt trained -x '*__pycache__*'
+     ```
+
+   The model goes in `trained/`, not `outputs/`. If it were in `outputs/`, the training notebook would think it was already trained and skip it. `trained/` is listed in `.gitignore`.
+2. **Upload it.** On kaggle.com, go to **Create → New Dataset**, drag in `cxr-shortcut-check.zip`, title it `cxr-shortcut-check`, keep it **Private**, then **Create**.
+3. **Import the notebook.** Go to **Create → New Notebook → File → Import Notebook**, and choose `notebooks/03_shortcut_cases.ipynb`.
+4. **Add the inputs.** Use **Add Input** to add `cxr-shortcut-check` and the NIH dataset, the 45 GB **NIH Chest X-rays** by the National Institutes of Health.
+5. **Leave the GPU off.** In **Session options**, set Accelerator to **None**. Internet isn't needed.
+6. **Run it.** Click **Save Version → Save & Run All (Commit)**. It takes about 5–15 minutes.
+7. **Download the results.** From the version's **Output** tab, download **`shortcut_cases.zip`**. It contains:
+   - one picture per case: the X-ray with the radiologist's box on the left, and with the heatmap on the right
+   - `overview.png`: all the cases on one page
+   - `demo_samples/`: 14 test X-rays (2 per disease, plus 2 with no finding) for trying the demo, with their real labels in `labels.csv`
+
+In each picture, look at where the heat sits. Common shortcuts are a chest drain (a tube, usually entering from the side of the chest), ECG wires, text markers such as "PORTABLE", the shoulder, or the edge of the image.
 
 ### Command reference
 
@@ -220,29 +259,88 @@ If `git push` is rejected, someone else pushed first: run `git pull`, then `git 
 
 ## Study guide
 
-[docs/viva-guide.html](docs/viva-guide.html) is a plain-language guide to the whole project, with diagrams, a code map and 53 practice viva questions. Download it and open it in a browser (GitHub shows HTML files as source code).
+[docs/viva-guide.html](docs/viva-guide.html) is a plain-language guide to the whole project, with diagrams, a code map and 54 practice viva questions. Download it and open it in a browser (GitHub shows HTML files as source code).
 
 ## Results
 
-_Fill in after training._
+All three models were trained on Kaggle on one Tesla T4, at about 7.7 minutes per epoch; the whole notebook took about 4 hours. Every number below is on the **official NIH test split**: 25,596 images from 2,797 patients, none of them used for training, early stopping or threshold tuning. All 984 bounding-box images are in this split (`localization.py` printed `OK: all 984 box images are in the held-out test split`).
 
-| Experiment | Mean AUROC | Mean AUPRC | Mean F1 |
-|---|---|---|---|
-| DenseNet-121 + BCE | | | |
-| DenseNet-121 + weighted BCE | | | |
-| DenseNet-121 + focal | | | |
+`python scripts/analyse_results.py` reproduces the confidence intervals and the flagged/missed split (about 5 minutes on a laptop).
 
-| Class (bbox subset) | Pointing game | Energy in box | Random baseline (box fraction) |
-|---|---|---|---|
-| | | | |
+### 1. Classification: the three losses tie
 
-A CheXNet-style DenseNet-121 at 224px usually reaches a mean test AUROC of around 0.80–0.84 on the official split.
+| Loss | Mean AUROC (95% CI) | Mean AUPRC | Mean F1 | Best validation AUROC | Epochs run (best) |
+|---|---|---|---|---|---|
+| BCE | 0.801 (0.794–0.808) | 0.269 | 0.329 | 0.835 | 8 (5) |
+| Weighted BCE | 0.799 (0.792–0.805) | 0.264 | 0.325 | 0.832 | 10 (8) |
+| Focal | 0.798 (0.791–0.805) | 0.266 | 0.327 | 0.834 | 8 (5) |
+
+Confidence intervals come from a paired bootstrap that resamples patients (1,000 resamples), since most patients have several X-rays.
+
+- **No loss wins on mean AUROC.** Weighted BCE minus BCE is −0.002 (95% CI −0.007 to +0.003); focal minus BCE is −0.003 (−0.006 to +0.000). AUROC only measures how images are ranked. Class weights mainly push rare-disease probabilities up rather than reorder them, and the per-class thresholds already correct the decision cut-off.
+- **Weighting helps the rarest disease.** Hernia AUPRC rises from 0.270 with BCE to 0.361 with weighted BCE, a difference of +0.09 (95% CI +0.01 to +0.17). The test set has only 32 patients with hernia, so this is a small sample.
+- **Validation (0.83) is higher than test (0.80).** The model and thresholds were chosen on validation, and the official test patients are sicker than average: for example, 23.9% have infiltration against 17.7% across the whole dataset.
+
+Weighted BCE is the main model, used for the heatmap check and the demo. It is tied on AUROC and best on the rarest class.
+
+**Per-disease test results.** AUROC for all three losses, with the best in bold. AUPRC, sensitivity and specificity are for weighted BCE at its tuned threshold.
+
+| Condition | Test positives | AUROC BCE | AUROC weighted | AUROC focal | AUPRC | Sensitivity | Specificity |
+|---|---|---|---|---|---|---|---|
+| Atelectasis | 3,279 (12.8%) | **0.767** | 0.754 | 0.766 | 0.311 | 0.53 | 0.81 |
+| Cardiomegaly | 1,069 (4.2%) | 0.883 | **0.893** | 0.882 | 0.331 | 0.52 | 0.95 |
+| Effusion | 4,658 (18.2%) | 0.820 | **0.824** | 0.822 | 0.504 | 0.51 | 0.89 |
+| Infiltration | 6,112 (23.9%) | 0.675 | **0.690** | 0.667 | 0.385 | 0.69 | 0.59 |
+| Mass | 1,748 (6.8%) | **0.811** | 0.803 | 0.808 | 0.278 | 0.34 | 0.95 |
+| Nodule | 1,623 (6.3%) | **0.750** | 0.729 | 0.732 | 0.203 | 0.41 | 0.87 |
+| Pneumonia | 555 (2.2%) | **0.722** | 0.695 | 0.708 | 0.049 | 0.07 | 0.98 |
+| Pneumothorax | 2,665 (10.4%) | **0.851** | 0.850 | 0.850 | 0.384 | 0.53 | 0.91 |
+| Consolidation | 1,815 (7.1%) | 0.742 | **0.744** | 0.735 | 0.162 | 0.53 | 0.78 |
+| Edema | 925 (3.6%) | **0.850** | 0.839 | 0.848 | 0.153 | 0.31 | 0.95 |
+| Emphysema | 1,093 (4.3%) | 0.891 | **0.896** | 0.892 | 0.361 | 0.55 | 0.95 |
+| Fibrosis | 435 (1.7%) | **0.815** | 0.808 | 0.807 | 0.084 | 0.15 | 0.98 |
+| Pleural Thickening | 1,143 (4.5%) | **0.771** | 0.762 | 0.764 | 0.135 | 0.35 | 0.91 |
+| Hernia | 86 (0.3%) | 0.868 | **0.903** | 0.893 | 0.361 | 0.40 | 1.00 |
+
+Diseases with clear visual signs score highest: hernia, emphysema and cardiomegaly, at about 0.89–0.90. Infiltration (0.69) and pneumonia (0.70) score lowest; they look vague and their labels are noisy. Pneumonia's F1-tuned threshold catches only 7% of cases, so a screening tool would need a lower threshold for it.
+
+### 2. Does the model look in the right place?
+
+This compares the weighted-BCE model's Grad-CAM heatmaps with the 984 radiologist boxes:
+
+- **Pointing:** the heatmap's hottest point is inside the box.
+- **Random baseline:** the box's share of the image, which is what a randomly placed peak would score.
+- **Flagged:** the model's probability was above its tuned threshold, so it actually predicted the disease.
+
+| Condition | Boxes | Flagged | Pointing (flagged) | Pointing (missed) | Energy in box | Random baseline | Test AUROC |
+|---|---|---|---|---|---|---|---|
+| Cardiomegaly | 146 | 66% | **0.99** | 0.76 | 0.51 | 0.18 | 0.893 |
+| Pneumonia | 120 | 14% | 0.65 | 0.32 | 0.20 | 0.09 | 0.695 |
+| Infiltration | 123 | 76% | 0.50 | 0.14 | 0.18 | 0.10 | 0.690 |
+| Mass | 85 | 40% | 0.35 | 0.06 | 0.12 | 0.04 | 0.803 |
+| Effusion | 153 | 61% | 0.34 | 0.15 | 0.15 | 0.07 | 0.824 |
+| Atelectasis | 180 | 58% | 0.22 | 0.11 | 0.08 | 0.03 | 0.754 |
+| Pneumothorax | 98 | 49% | 0.15 | 0.14 | 0.10 | 0.05 | 0.850 |
+| Nodule | 79 | 43% | 0.06 | 0.02 | 0.01 | 0.005 | 0.729 |
+| **All** | **984** | **53%** | **0.44** | **0.22** | **0.18** | **0.08** | |
+
+Grad-CAM++ gives similar overall numbers: pointing 0.36, energy 0.16 and IoU 0.21, against 0.34, 0.18 and 0.20 for Grad-CAM.
+
+- **Better than random for every disease.** When the model flags a disease, its heatmap peak is inside the radiologist's box 44% of the time, against 8% for a random peak.
+- **Cardiomegaly is right for the right reason.** 99% of flagged cases point at the heart.
+- **Pneumothorax is the warning sign.** It has the fourth-highest AUROC (0.85) but the weakest localisation relative to chance. Pointing is no better when the model flags it (0.15) than when it misses it (0.14). Part of the score seems to come from evidence outside the collapsed region. This is consistent with published work showing that NIH pneumothorax models partly detect chest drains, the tubes used to treat it (Oakden-Rayner et al., 2020).
+- **Nodules are too small for Grad-CAM.** Their boxes cover 0.5% of the image, less than one cell of the 7×7 heatmap grid, so their low scores mostly reflect resolution rather than shortcuts.
+- **31 of the 521 flagged boxes (6%) have almost no heat inside the box.** By condition: Nodule 11, Pneumothorax 7, Effusion 4, Atelectasis 4, Mass 3 and Infiltration 2. They are listed in `localization_gradcam/shortcut_candidates.csv` and are the cases to inspect for drains, wires or text markers. [Section D](#d-picture-the-shortcut-candidates) draws them.
+- **The saved `worst_*.png` examples are missed diagnoses, not shortcuts.** All six had a probability below the threshold. Five have heat only outside the box, and one has no heatmap at all. The script ranks every box by energy in box, so a disease the model missed counts as "worst".
 
 ## Limitations
 
 - NIH labels were mined from radiology reports by NLP and are noisy (estimated >90% accurate, lower for some classes).
 - Grad-CAM resolution is limited by the 7×7 final feature map at 224px, so small nodules localise poorly.
 - Bounding boxes cover only 8 of the 14 classes and fewer than 1,000 images.
+- Each loss was trained once, with one random seed. The bootstrap intervals cover test-set variation, not training variation.
+- The 31 shortcut candidates have been found by the numbers but not yet inspected visually.
+- All images come from one hospital system; the model has not been tested on X-rays from elsewhere.
 - This is a research prototype, not a medical device.
 
 ## References
@@ -252,3 +350,4 @@ A CheXNet-style DenseNet-121 at 224px usually reaches a mean test AUROC of aroun
 - Selvaraju et al., *Grad-CAM*, ICCV 2017. Chattopadhay et al., *Grad-CAM++*, WACV 2018.
 - Lin et al., *Focal Loss*, ICCV 2017. Ridnik et al., *Asymmetric Loss*, ICCV 2021.
 - DeGrave et al., *AI for radiographic COVID-19 detection selects shortcuts over signal*, Nature Machine Intelligence 2021.
+- Oakden-Rayner et al., *Hidden stratification causes clinically meaningful failures in machine learning for medical imaging*, ACM CHIL 2020.

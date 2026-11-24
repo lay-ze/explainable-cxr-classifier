@@ -3,7 +3,7 @@
 Decoding 1024px PNGs is usually the training bottleneck on Kaggle/Colab (few CPU cores).
 Resizing once to 256px makes every epoch several times faster and needs ~4-5 GB of disk.
 
-    python -m src.preprocess --src /kaggle/input/data --dst /kaggle/working/nih256 --size 256
+    python -m src.preprocess --src /kaggle/input/data --dst /kaggle/temp/nih256 --size 256
 
 Train with --data-dir pointing to the resized copy. src.localization rescales the 1024px box
 coordinates automatically, but the original images give sharper heatmap overlays.

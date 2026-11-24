@@ -4,3 +4,5 @@ __pycache__/
 outputs/
 data/
 .ipynb_checkpoints/
+*.zip
+trained/
