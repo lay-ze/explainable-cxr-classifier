@@ -18,7 +18,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
-from .dataset import build_transforms, load_image
+from .dataset import build_transforms
 from .model import CXRModel
 
 METHODS = ("gradcam", "gradcam++")
@@ -86,11 +86,3 @@ def overlay(img: Image.Image, cam: np.ndarray, alpha: float = 0.45, colormap: st
     a = alpha * cam[..., None]
     out = (1 - a) * base + a * heat
     return Image.fromarray((out * 255).clip(0, 255).astype(np.uint8))
-
-
-def explain_path(model: CXRModel, path: str, class_indices, img_size=224, method="gradcam", device="cpu"):
-    """Convenience: path -> (PIL image, probs, {class_idx: overlay image})."""
-    img = load_image(path)
-    exp = CAMExplainer(model, img_size, method, device)
-    probs, cams = exp.explain_image(img, class_indices)
-    return img, probs, {c: overlay(img, cam) for c, cam in cams.items()}

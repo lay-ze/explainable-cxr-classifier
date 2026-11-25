@@ -1,6 +1,6 @@
 """Train a multi-label chest X-ray classifier.
 
-    python -m src.train --config configs/default.yaml --data-dir /kaggle/input/data --out-dir outputs/densenet_wbce
+    python -m src.train --config configs/default.yaml --data-dir /kaggle/temp/nih256 --out-dir outputs/densenet121_wbce
 
 Any config key can be overridden from the command line, e.g. `--loss focal --epochs 5`.
 Use `--subset 500` for a quick smoke test on a few hundred images.
@@ -26,15 +26,13 @@ from .model import build_model
 
 DEFAULTS = {
     "data_dir": None,
-    "out_dir": "outputs/run",
-    "backbone": "densenet121",
+    "out_dir": "outputs/densenet121_wbce",
     "pretrained": True,
     "img_size": 224,
     "batch_size": 32,
     "epochs": 10,
     "lr": 1e-4,
     "weight_decay": 1e-5,
-    "dropout": 0.0,
     "loss": "weighted_bce",
     "patience": 3,
     "num_workers": 2,
@@ -98,7 +96,7 @@ def train(cfg: dict) -> dict:
                             pin_memory=device.type == "cuda")
 
     # ---- model / loss / optimiser
-    model = build_model(cfg["backbone"], cfg["pretrained"], cfg["dropout"]).to(device)
+    model = build_model(cfg["pretrained"]).to(device)
     pw = pos_weights(train_df).to(device)
     criterion = build_loss(cfg["loss"], pw).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
@@ -139,7 +137,7 @@ def train(cfg: dict) -> dict:
             best_auc = val_auc if not np.isnan(val_auc) else best_auc
             torch.save(ckpt, out_dir / "best_model.pt")
             bad_epochs = 0
-            print(f"  saved best_model.pt")
+            print("  saved best_model.pt")
         else:
             bad_epochs += 1
             if bad_epochs >= cfg["patience"]:

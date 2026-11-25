@@ -1,7 +1,7 @@
 """Gradio demo: upload a chest X-ray, get 14 independent probabilities and Grad-CAM heatmaps.
 
-    python app/app.py --checkpoint outputs/run/best_model.pt          # local
-    python app/app.py --checkpoint outputs/run/best_model.pt --share  # public link (Colab/Kaggle)
+    python app/app.py --checkpoint outputs/densenet121_wbce/best_model.pt
+    python app/app.py --checkpoint outputs/densenet121_wbce/best_model.pt --share  # temporary public link
 
 If thresholds.json (written by src.evaluate) sits next to the checkpoint, its per-class
 thresholds decide which findings are flagged; otherwise 0.5 is used.
@@ -61,7 +61,7 @@ def build_app(checkpoint: str) -> gr.Blocks:
 
     with gr.Blocks(title="Explainable Chest X-ray Classifier") as demo:
         gr.Markdown("# Explainable multi-label chest X-ray classifier\n"
-                    f"Backbone: `{ckpt['config']['backbone']}` · trained on NIH ChestX-ray14 · "
+                    f"DenseNet-121 · trained on NIH ChestX-ray14 · "
                     f"validation mean AUROC {ckpt.get('val_mean_auroc', float('nan')):.3f}\n\n{DISCLAIMER}")
         with gr.Row():
             with gr.Column(scale=1):
@@ -80,7 +80,7 @@ def build_app(checkpoint: str) -> gr.Blocks:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--checkpoint", default=str(ROOT / "outputs" / "run" / "best_model.pt"))
+    ap.add_argument("--checkpoint", default=str(ROOT / "outputs" / "densenet121_wbce" / "best_model.pt"))
     ap.add_argument("--share", action="store_true", help="create a public Gradio link")
     ap.add_argument("--port", type=int, default=7860)
     a = ap.parse_args()

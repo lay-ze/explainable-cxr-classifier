@@ -34,7 +34,3 @@ def encode(finding_labels: str) -> np.ndarray:
         if name in CLASS_TO_IDX:
             vec[CLASS_TO_IDX[name]] = 1.0
     return vec
-
-
-def decode(vec, threshold: float = 0.5) -> list[str]:
-    return [CLASSES[i] for i, v in enumerate(vec) if v >= threshold]

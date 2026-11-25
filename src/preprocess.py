@@ -1,6 +1,6 @@
 """Optional: pre-resize NIH images (1024x1024 PNG) to a smaller size once, before training.
 
-Decoding 1024px PNGs is usually the training bottleneck on Kaggle/Colab (few CPU cores).
+Decoding 1024px PNGs is usually the training bottleneck on Kaggle (few CPU cores).
 Resizing once to 256px makes every epoch several times faster and needs ~4-5 GB of disk.
 
     python -m src.preprocess --src /kaggle/input/data --dst /kaggle/temp/nih256 --size 256

@@ -12,7 +12,7 @@ that box's class and measure:
 A class whose AUROC is high but whose energy_in_box is near box_fraction is a red flag:
 the model may be classifying from something other than the lesion (a shortcut).
 
-    python -m src.localization --checkpoint outputs/run/best_model.pt --data-dir /path/to/nih
+    python -m src.localization --checkpoint outputs/densenet121_wbce/best_model.pt --data-dir /path/to/nih
 """
 from __future__ import annotations
 

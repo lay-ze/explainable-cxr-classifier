@@ -12,8 +12,8 @@ B.Tech 3rd-year capstone project. A CNN predicts **14 thoracic conditions** from
 | Part | Choice | Why |
 |---|---|---|
 | Data split | Official NIH train_val / test lists, with a **patient-level** validation split | NIH has many follow-up scans per patient. Splitting by image would leak patients and inflate scores. |
-| Model | DenseNet-121 (ImageNet-pretrained), 14 sigmoid outputs | The CheXNet baseline. ResNet-50 and EfficientNet-B0 are also supported for comparison. |
-| Imbalance | Compared: BCE, **weighted BCE** (`pos_weight = neg/pos`), focal loss, asymmetric loss | Stops rare classes from being ignored. |
+| Model | DenseNet-121 (ImageNet-pretrained), 14 sigmoid outputs | The CheXNet baseline, so results are comparable with published work. |
+| Imbalance | Compared: plain BCE, **weighted BCE** (`pos_weight = neg/pos`), focal loss | Tests whether extra weighting stops rare classes from being ignored (see Results). |
 | Decisions | **Per-class thresholds** tuned on validation to maximise F1 | A single 0.5 threshold almost never fires for rare classes. |
 | Metrics | Per-class AUROC, **AUPRC**, F1, sensitivity, specificity | AUPRC shows rare-class performance more honestly than AUROC. |
 | Augmentation | Small affine, brightness/contrast; **no horizontal flip** | A flip puts the heart on the wrong side. |
@@ -26,8 +26,8 @@ B.Tech 3rd-year capstone project. A CNN predicts **14 thoracic conditions** from
 src/
   labels.py        14 class names, multi-hot encoding
   dataset.py       metadata loading, patient-level split, transforms, Dataset
-  model.py         backbone + 14-way head (features/head split for Grad-CAM)
-  losses.py        weighted BCE, focal, asymmetric loss
+  model.py         DenseNet-121 + 14-way head (features/head split for Grad-CAM)
+  losses.py        weighted BCE and focal loss
   train.py         training loop (AMP, cosine LR, early stopping on val AUROC)
   evaluate.py      metrics, threshold tuning, ROC/PR plots   (CLI)
   explain.py       Grad-CAM / Grad-CAM++ and heatmap overlays
@@ -41,7 +41,6 @@ notebooks/01_eda.ipynb           class imbalance, co-occurrence, split check
 notebooks/02_train_kaggle.ipynb  full pipeline on a Kaggle GPU
 notebooks/03_shortcut_cases.ipynb  pictures of the shortcut candidates (Kaggle, CPU only)
 app/app.py                       Gradio demo
-docs/viva-guide.html             study guide and viva questions
 docs/figures/                    result figures used in this readme
 ```
 
@@ -209,8 +208,7 @@ Any setting in `configs/default.yaml` can be changed on the command line:
 
 | Option | Values | Default |
 |---|---|---|
-| `--loss` | `bce`, `weighted_bce`, `focal`, `asl` | `weighted_bce` |
-| `--backbone` | `densenet121`, `resnet50`, `efficientnet_b0` | `densenet121` |
+| `--loss` | `bce`, `weighted_bce`, `focal` | `weighted_bce` |
 | `--epochs`, `--batch-size`, `--lr` | numbers | `10`, `32`, `0.0001` |
 | `--img-size` | input size in pixels | `224` |
 | `--subset` | train on only this many images (quick tests) | `0` (all) |
@@ -239,28 +237,12 @@ What each step writes into the run's folder (e.g. `outputs/densenet121_wbce/`):
 | `Checkpoint not found` | The path to `best_model.pt` is wrong. Check where you unzipped the results. |
 | `Cannot find empty port` | Another program is using port 7860. Add `--port 7861`. |
 
-### Working together on GitHub
-
-```bash
-git pull                          # always get your teammates' changes first
-# ... edit files ...
-git add -A
-git commit -m "say what you changed"
-git push
-```
-
-If `git push` is rejected, someone else pushed first: run `git pull`, then `git push` again. Datasets, `outputs/` and `.venv/` are listed in `.gitignore`, so they are never uploaded. Keep it that way; model files are too large for GitHub.
-
 ## Demo
 
 `app/app.py` opens a Gradio page where you upload an X-ray and get:
 - an independent probability for each of the 14 conditions,
 - the conditions above their tuned threshold (several can be flagged at once),
 - Grad-CAM / Grad-CAM++ overlays for the top-k conditions or any you pick.
-
-## Study guide
-
-[docs/viva-guide.html](docs/viva-guide.html) is a plain-language guide to the whole project, with diagrams, a code map and 56 practice viva questions. Download it and open it in a browser (GitHub shows HTML files as source code).
 
 ## Results
 
@@ -390,6 +372,6 @@ So the demo will often flag something on a healthy X-ray. A screening tool would
 - Wang et al., *ChestX-ray8*, CVPR 2017.
 - Rajpurkar et al., *CheXNet*, arXiv:1711.05225, 2017.
 - Selvaraju et al., *Grad-CAM*, ICCV 2017. Chattopadhay et al., *Grad-CAM++*, WACV 2018.
-- Lin et al., *Focal Loss*, ICCV 2017. Ridnik et al., *Asymmetric Loss*, ICCV 2021.
+- Lin et al., *Focal Loss*, ICCV 2017.
 - DeGrave et al., *AI for radiographic COVID-19 detection selects shortcuts over signal*, Nature Machine Intelligence 2021.
 - Oakden-Rayner et al., *Hidden stratification causes clinically meaningful failures in machine learning for medical imaging*, ACM CHIL 2020.

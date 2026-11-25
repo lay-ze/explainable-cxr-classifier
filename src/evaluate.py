@@ -1,7 +1,7 @@
 """Metrics, per-class threshold tuning, and evaluation plots.
 
 CLI usage (after training):
-    python -m src.evaluate --checkpoint outputs/run/best_model.pt --data-dir /path/to/nih
+    python -m src.evaluate --checkpoint outputs/densenet121_wbce/best_model.pt --data-dir /path/to/nih
 
 Writes to the checkpoint's folder:
     thresholds.json   per-class decision thresholds tuned on the validation split
